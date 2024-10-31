@@ -87,7 +87,8 @@ struct ad9508_state {
 
 	struct gpio_desc		*reset_gpio;
 	struct gpio_desc		*sync_gpio;
-
+	bool			read_write_confirmed;
+	unsigned long		regs_hw[44];
 	struct mutex		lock;
 
 	/*
@@ -106,30 +107,36 @@ static int ad9508_read(struct iio_dev *indio_dev, unsigned addr)
 	int ret;
 	u32 mask = ~0U >> (32 - 8 * AD9508_TRANSF_LEN(addr));
 
-	/* We encode the register size 1..3 bytes into the register address.
-	 * On transfer we get the size from the register datum, and make sure
-	 * the result is properly aligned.
-	 */
+	if (st->read_write_confirmed) {
 
-	struct spi_transfer t[] = {
-		{
-			.tx_buf = &st->data[0].d8[2],
-			.len = 2,
-		}, {
-			.rx_buf = &st->data[1].d8[4 - AD9508_TRANSF_LEN(addr)],
-			.len = AD9508_TRANSF_LEN(addr),
-		},
-	};
+		/* We encode the register size 1..3 bytes into the register address.
+		 * On transfer we get the size from the register datum, and make sure
+		 * the result is properly aligned.
+		 */
 
-	st->data[0].d32 = cpu_to_be32(AD9508_READ |
-			AD9508_CNT(AD9508_TRANSF_LEN(addr)) |
-			AD9508_ADDR(addr));
+		struct spi_transfer t[] = {
+			{
+				.tx_buf = &st->data[0].d8[2],
+				.len = 2,
+			}, {
+				.rx_buf = &st->data[1].d8[4 - AD9508_TRANSF_LEN(addr)],
+				.len = AD9508_TRANSF_LEN(addr),
+			},
+		};
 
-	ret = spi_sync_transfer(st->spi, t, ARRAY_SIZE(t));
-	if (ret < 0)
-		dev_err(&indio_dev->dev, "read failed (%d)", ret);
-	else
-		ret = be32_to_cpu(st->data[1].d32) & mask;
+		st->data[0].d32 = cpu_to_be32(AD9508_READ |
+				AD9508_CNT(AD9508_TRANSF_LEN(addr)) |
+				AD9508_ADDR(addr));
+
+		ret = spi_sync_transfer(st->spi, t, ARRAY_SIZE(t));
+		if (ret < 0)
+			dev_err(&indio_dev->dev, "read failed (%d)", ret);
+		else
+			ret = be32_to_cpu(st->data[1].d32) & mask;
+
+	} else {
+		ret =  st->regs_hw[addr & 0xFF];
+	}
 
 	return ret;
 };
@@ -160,6 +167,8 @@ static int ad9508_write(struct iio_dev *indio_dev, unsigned addr, unsigned val)
 
 	if (ret < 0)
 		dev_err(&indio_dev->dev, "write failed (%d)", ret);
+
+	st->regs_hw[addr & 0xFF] = val;
 
 	return ret;
 }
@@ -470,15 +479,17 @@ static int ad9508_setup(struct iio_dev *indio_dev)
 	if (ret < 0)
 		return ret;
 
+	st->read_write_confirmed = 1;
 
 	ret = ad9508_read(indio_dev, AD9508_PART_ID);
 	if (ret < 0)
 		return ret;
 
-	if (ret != 0x0500) {
-		dev_err(&st->spi->dev, "Unexpected device ID (0x%.2x)\n", ret);
-		return -ENODEV;
-	}
+	st->read_write_confirmed = (ret == 0x0500);
+
+	if (!st->read_write_confirmed)
+		dev_warn(&indio_dev->dev,
+				"Read/Write check failed (0x%X)\n", ret);
 
 	st->clk_data.clks = st->clks;
 	st->clk_data.clk_num = AD9508_NUM_CHAN;
@@ -601,6 +612,8 @@ static int ad9508_probe(struct spi_device *spi)
 	struct ad9508_platform_data *pdata;
 	struct iio_dev *indio_dev;
 	struct ad9508_state *st;
+	unsigned int regs_hw_regs[] = {0x19, 0x1f, 0x25, 0x2b, 0x14};
+	unsigned int regs_hw_rst_values[] = {0x14, 0x14, 0x14, 0x14, 0x1};
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
@@ -608,6 +621,13 @@ static int ad9508_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
+	memset(st->regs_hw, 0xFF, sizeof(st->regs_hw));
+
+	/* Initialize the regs_hw array with the reset values */
+
+	for (int i = 0; i < 5; i++)
+		st->regs_hw[regs_hw_regs[i]] = regs_hw_rst_values[i];
+
 
 	st->clkin = devm_clk_get(&spi->dev, "clkin");
 	if (IS_ERR(st->clkin)) {
