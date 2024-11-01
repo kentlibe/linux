@@ -1,0 +1,277 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Analog Devices ad9164-FMC-EBZ
+ * https://www.analog.com/en/resources/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-AD916X.html
+ * Linux driver: https://wiki.analog.com/resources/tools-software/linux-drivers/iio-pll/ad9162
+ *
+ * hdl_project: <dac_fmc_ebz/zcu102> with device=ad9164 and mode=04 in common/config.tcl
+ * board_revision: <1.0>
+ *
+ * Copyright (C) 2024 Analog Devices Inc.
+*/
+#include "zynqmp-zcu102-rev1.0.dts"
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/jesd204/adxcvr.h>
+#include <dt-bindings/iio/frequency/ad9508.h>
+#include <dt-bindings/jesd204/device-states.h>
+
+&i2c1 {
+	i2c-mux@75 {
+		i2c@0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0>;
+
+			eeprom@50 {
+				compatible = "at24,24c02";
+				reg = <0x50>;
+			};
+
+		};
+	};
+};
+
+/ {
+	clocks {
+    adf4355_clkin: clock@0 {
+		compatible = "fixed-clock";
+		clock-frequency = <120000000>;
+		clock-output-names = "clkin";
+		#clock-cells = <0>;
+		};
+    jesd_dac_clk_in: clock@1 {
+		compatible = "fixed-clock";
+		clock-frequency =  /bits/ 64 <12000000000>;
+		clock-output-names = "jesd_dac_clk_in";
+		#clock-cells = <0>;
+		};
+
+		adf4355_out_div4: hmc365 {
+			#clock-cells = <0>;
+			compatible = "fixed-factor-clock";
+			clock-div = <4>;
+			clock-mult = <1>;
+			clocks = <&adf4355_clk>;
+		};
+	};
+
+	fpga_axi: fpga-axi@0 {
+		interrupt-parent = <&gic>;
+		compatible = "simple-bus";
+		#address-cells = <0x1>;
+		#size-cells = <0x1>;
+		ranges = <0 0 0 0xffffffff>;
+
+		tx_dma: tx-dmac@9c420000 {
+			#dma-cells = <1>;
+			compatible = "adi,axi-dmac-1.00.a";
+			reg = <0x9c420000 0x10000>;
+			interrupts = <0 108 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&zynqmp_clk 71>;
+
+			adi,channels {
+				#size-cells = <0>;
+				#address-cells = <1>;
+
+				dma-channel@0 {
+					reg = <0>;
+					adi,source-bus-width = <64>;
+					adi,source-bus-type = <0>;
+					adi,destination-bus-width = <128>;
+					adi,destination-bus-type = <1>;
+				};
+			};
+		};
+
+/*
+ * e de fapt 0x44A04000 dac_jesd204_transport, adica instanta de ad_ip_jesd204_tpl_dac
+*/
+		axi_ad9164_core: axi-ad9164-hpc@84a04000 {
+			compatible = "adi,axi-ad9164-1.0";
+			reg = <0x84a04000 0x10000>;
+			dmas = <&tx_dma 0>;
+			dma-names = "tx";
+			spibus-connected = <&dac0_ad9164>;
+			adi,axi-pl-fifo-enable;
+
+			/* jesd204-fsm support */
+			jesd204-device;
+			#jesd204-cells = <2>;
+			jesd204-inputs = <&axi_ad9164_jesd 0 0>;
+		};
+/*
+ * e de fapt 0x44A90000 dac_jesd204_link
+*/
+		axi_ad9164_jesd: axi-jesd204-tx@84a90000 {
+			compatible = "adi,axi-jesd204-tx-1.0";
+			reg = <0x84a90000 0x4000>;
+
+			interrupts = <0 106 IRQ_TYPE_LEVEL_HIGH>;
+
+			clocks = <&zynqmp_clk 71>, <&axi_ad9164_adxcvr 1>, <&axi_ad9164_adxcvr 0>;
+			clock-names = "s_axi_aclk", "device_clk", "lane_clk";
+
+			#clock-cells = <0>;
+			clock-output-names = "jesd_dac_lane_clk";
+
+			/* jesd204-fsm support */
+			jesd204-device;
+			#jesd204-cells = <2>;
+			jesd204-inputs = <&axi_ad9164_adxcvr 0 0>;
+		};
+
+		axi_ad9164_adxcvr: axi-adxcvr-tx@84a60000 {
+			compatible = "adi,axi-adxcvr-1.0";
+			reg = <0x84a60000 0x1000>;
+
+			clocks = <&ad9508_clk 0>;
+			clock-names = "conv";
+
+			adi,sys-clk-select = <XCVR_QPLL>;
+			adi,out-clk-select = <XCVR_REFCLK_DIV2>;
+			adi,use-lpm-enable;
+
+			#clock-cells = <1>;
+			clock-output-names = "dac_gt_clk", "tx_out_clk";
+
+			/* jesd204-fsm support */
+			jesd204-device;
+			#jesd204-cells = <2>;
+			jesd204-inputs = <&ad9508_clk 0 0>;
+		};
+
+		axi_sysid_0: axi-sysid-0@85000000 {
+			compatible = "adi,axi-sysid-1.00.a";
+			reg = <0x85000000 0x10000>;
+		};
+	};
+};
+
+
+&spi0 {
+	status = "okay";
+  adf4355_clk: adf4355@2 {
+		compatible = "adi,adf4355";
+		reg = <2>;
+		spi-max-frequency = <10000000>;
+
+		clocks = <&adf4355_clkin>;
+		clock-names = "clkin";
+		clock-scales = <1 1>;
+
+		clock-output-names = "adf4355_clk";
+		#clock-cells = <0>;
+
+		adi,charge-pump-current = <900>;
+		adi,muxout-select = <6>;
+		adi,output-a-power = <3>;
+		adi,output-b-power = <3>;
+		adi,charge-pump-negative-bleed-enable;
+		adi,reference-differential-input-enable;
+		// adi,reference-div2-enable;
+		adi,muxout-level-3v3-enable;
+		adi,power-up-frequency = /bits/ 64 <2400000000>;
+		adi,output-a-enable;
+		adi,output-b-enable;
+//		adi,clock-shift = <1>;
+	};
+
+
+
+  ad9508_clk: ad9508@0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		#clock-cells = <1>;
+		compatible = "adi,ad9508";
+
+		reg = <0>;
+		// spi-cpol;
+		// spi-cpha;
+		// adi,spi-3wire-enable;
+
+		clocks = <&adf4355_out_div4>;
+
+		spi-max-frequency = <10000000>;
+		clock-output-names = "ad9508_out0", "ad9508_out1", "ad9508_out2", "ad9508_out3";
+
+		// /* jesd204-fsm support */
+		jesd204-device;
+		#jesd204-cells = <2>;
+		jesd204-sysref-provider;
+		adi,jesd204-max-sysref-frequency-hz = <2000000000>; /* 2 MHz */
+
+		ad9508_0_c0:channel@0 {
+			reg = <0>;
+			adi,extended-name = "REF_CLK";
+			adi,driver-mode = <(DRIVER_PHASE_NORMAL | DRIVER_MODE_HSTL)>;
+			adi,divider-phase = <0>;
+			adi,channel-divider = <1>;
+		};
+
+		/* Not connected */
+		ad9508_0_c1:channel@1 {
+			reg = <1>;
+			adi,extended-name = "PLL_REF";
+			adi,driver-mode = <(DRIVER_PHASE_NORMAL | DRIVER_MODE_HSTL)>;
+			adi,divider-phase = <0>;
+			adi,channel-divider = <1>;
+		};
+
+		ad9508_0_c2:channel@2 {
+			reg = <2>;
+			adi,extended-name = "SYSREF2";
+			adi,driver-mode = <(DRIVER_PHASE_NORMAL | DRIVER_MODE_HSTL)>;
+			adi,divider-phase = <0>;
+			adi,channel-divider = <2048>;
+			adi,jesd204-sysref-chan;
+		};
+
+		ad9508_0_c3:channel@3 {
+			reg = <3>;
+			adi,extended-name = "SYSREF";
+			adi,driver-mode = <(DRIVER_PHASE_NORMAL | DRIVER_MODE_HSTL)>;
+			adi,divider-phase = <0>;
+			adi,channel-divider = <2048>;
+			adi,jesd204-sysref-chan;
+		};
+  };
+
+		dac0_ad9164: ad9164@1 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			compatible = "adi,ad9164";
+			reg = <1>;
+			spi-max-frequency = <1000000>;
+			clocks = <&jesd_dac_clk_in>, <&adf4355_clk>, <&ad9508_clk 3> ;
+			clock-names = "jesd_dac_clk", "dac_clk", "dac_sysref";
+
+//			dac_clk-clock-scales = <1 2>;
+			adi,full-scale-current-microamp = <20000>;
+
+			/* jesd204-fsm support */
+			jesd204-device;
+			#jesd204-cells = <2>;
+			jesd204-top-device = <0>; /* This is the TOP device */
+			jesd204-link-ids = <0>;
+			jesd204-inputs = <&axi_ad9164_core 0 0>;
+//			adi,jesd204-ignore-errors;
+			adi,jesd-link-mode = <4>;
+			adi,dac-rate-khz = <12000000>;
+
+			adi,subclass = <0>;			/* JESD SUBCLASS 0,1,2 */
+			adi,version = <1>;			/* JESD VERSION 0=204A,1=204B,2=204C */
+			adi,converters-per-device = <2>;	/* JESD M */
+			adi,octets-per-frame = <1>;		/* JESD F */
+			adi,frames-per-multiframe = <32>;	/* JESD K */
+			adi,converter-resolution = <16>;	/* JESD N */
+			adi,bits-per-sample = <16>;		/* JESD NP' */
+			adi,control-bits-per-sample = <0>;	/* JESD CS */
+			adi,lanes-per-device = <4>;		/* JESD L */
+			adi,samples-per-converter-per-frame = <2>; /* JESD S */
+
+			adi,interpolation = <4>;
+			txen-gpios = <&gpio 99 0>;
+		};
+ };
+
