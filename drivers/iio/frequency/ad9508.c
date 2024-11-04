@@ -627,10 +627,10 @@ static int ad9508_probe(struct spi_device *spi)
 	/* Initialize the regs_hw array with the reset values */
 
 	st->regs_hw[regs_hw_regs[0]] = regs_hw_rst_values[0];
-    st->regs_hw[regs_hw_regs[1]] = regs_hw_rst_values[1];
-    st->regs_hw[regs_hw_regs[2]] = regs_hw_rst_values[2];
-    st->regs_hw[regs_hw_regs[3]] = regs_hw_rst_values[3];
-    st->regs_hw[regs_hw_regs[4]] = regs_hw_rst_values[4];
+	st->regs_hw[regs_hw_regs[1]] = regs_hw_rst_values[1];
+	st->regs_hw[regs_hw_regs[2]] = regs_hw_rst_values[2];
+	st->regs_hw[regs_hw_regs[3]] = regs_hw_rst_values[3];
+	st->regs_hw[regs_hw_regs[4]] = regs_hw_rst_values[4];
 
 	st->clkin = devm_clk_get(&spi->dev, "clkin");
 	if (IS_ERR(st->clkin)) {
