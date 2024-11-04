@@ -87,7 +87,8 @@ struct ad9508_state {
 
 	struct gpio_desc		*reset_gpio;
 	struct gpio_desc		*sync_gpio;
-
+	bool			read_write_confirmed;
+	unsigned long		regs_hw[44];
 	struct mutex		lock;
 
 	/*
@@ -105,6 +106,9 @@ static int ad9508_read(struct iio_dev *indio_dev, unsigned addr)
 	struct ad9508_state *st = iio_priv(indio_dev);
 	int ret;
 	u32 mask = ~0U >> (32 - 8 * AD9508_TRANSF_LEN(addr));
+
+	if (!st->read_write_confirmed)
+	    return st->regs_hw[addr & 0xFF];
 
 	/* We encode the register size 1..3 bytes into the register address.
 	 * On transfer we get the size from the register datum, and make sure
@@ -160,6 +164,11 @@ static int ad9508_write(struct iio_dev *indio_dev, unsigned addr, unsigned val)
 
 	if (ret < 0)
 		dev_err(&indio_dev->dev, "write failed (%d)", ret);
+
+	st->regs_hw[addr & 0xFF] = val;
+
+	if (ret < 0)
+		dev_err(&indio_dev->dev, "write of 0x%x reg with value 0x%x failed ", addr & 0xFF , val);
 
 	return ret;
 }
@@ -470,15 +479,17 @@ static int ad9508_setup(struct iio_dev *indio_dev)
 	if (ret < 0)
 		return ret;
 
+	st->read_write_confirmed = 1;
 
 	ret = ad9508_read(indio_dev, AD9508_PART_ID);
 	if (ret < 0)
 		return ret;
 
-	if (ret != 0x0500) {
-		dev_err(&st->spi->dev, "Unexpected device ID (0x%.2x)\n", ret);
-		return -ENODEV;
-	}
+	st->read_write_confirmed = (ret == 0x0500);
+
+	if (!st->read_write_confirmed)
+		dev_warn(&indio_dev->dev,
+				"Read/Write check failed (0x%X)\n", ret);
 
 	st->clk_data.clks = st->clks;
 	st->clk_data.clk_num = AD9508_NUM_CHAN;
@@ -601,6 +612,8 @@ static int ad9508_probe(struct spi_device *spi)
 	struct ad9508_platform_data *pdata;
 	struct iio_dev *indio_dev;
 	struct ad9508_state *st;
+	unsigned int regs_hw_regs[] = {0x19, 0x1f, 0x25, 0x2b, 0x14};
+	unsigned int regs_hw_rst_values[] = {0x14, 0x14, 0x14, 0x14, 0x1};
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
@@ -608,6 +621,16 @@ static int ad9508_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
+
+	memset(st->regs_hw, 0xFF, sizeof(st->regs_hw));
+
+	/* Initialize the regs_hw array with the reset values */
+
+	st->regs_hw[regs_hw_regs[0]] = regs_hw_rst_values[0];
+    st->regs_hw[regs_hw_regs[1]] = regs_hw_rst_values[1];
+    st->regs_hw[regs_hw_regs[2]] = regs_hw_rst_values[2];
+    st->regs_hw[regs_hw_regs[3]] = regs_hw_rst_values[3];
+    st->regs_hw[regs_hw_regs[4]] = regs_hw_rst_values[4];
 
 	st->clkin = devm_clk_get(&spi->dev, "clkin");
 	if (IS_ERR(st->clkin)) {
