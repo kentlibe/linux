@@ -47,11 +47,34 @@ config VIDEO_ADDI9036
 	  To compile this driver as a module, choose M here: the
 	  module will be called addi9036.
 
+config VIDEO_ADDI9036
+	tristate "Analog Devices ADDI9036 ToF sensor support"
+	depends on I2C && VIDEO_DEV && VIDEO_V4L2_SUBDEV_API
+	depends on MEDIA_CAMERA_SUPPORT
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 driver for Analog Devices ADDI9036
+	  Time of Flight sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called addi9036.
+
 config VIDEO_APTINA_PLL
 	tristate
 
 config VIDEO_CCS_PLL
 	tristate
+
+config VIDEO_AP1302
+	tristate "ON Semiconductor AP1302 support"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor-level driver for the ON Semiconductor
+	  AP1302 ISP.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ap1302.
 
 config VIDEO_AR0521
 	tristate "ON Semiconductor AR0521 sensor support"

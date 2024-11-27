@@ -21,15 +21,13 @@
 		regulator-always-on;
 	};
 
-	clocks {
-		ad7768_mclk: clock@0 {
+	ad7768_mclk: ad7768-mclock {
 		#clock-cells = <0>;
 		compatible = "fixed-clock";
 		clock-frequency = <32768000>;
-		};
 	};
 
-	cn0579_control@0 {
+	cn0579_control {
 		compatible = "adi,one-bit-adc-dac";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -77,19 +75,6 @@
 		interrupt-parent = <&intc>;
 		interrupts = <0 45 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&h2f_user0_clk>;
-
-		adi,channels {
-			#size-cells = <0>;
-			#address-cells = <1>;
-
-			dma-channel@0 {
-				reg = <0>;
-				adi,source-bus-width = <128>;
-				adi,source-bus-type = <2>;
-				adi,destination-bus-width = <64>;
-				adi,destination-bus-type = <0>;
-			};
-		};
 	};
 
 	axi_adc_ad7768: cf_axi_adc@30000 {

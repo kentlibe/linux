@@ -275,7 +275,7 @@ static int zynq_fpga_ops_write_init(struct fpga_manager *mgr,
 
 	/* don't globally reset PL if we're doing partial reconfig */
 	if (!(info->flags & FPGA_MGR_PARTIAL_RECONFIG)) {
-		if (!zynq_fpga_has_sync(buf, count)) {
+		if (!zynq_fpga_has_sync((u8 *)buf, count)) {
 			dev_err(&mgr->dev,
 				"Invalid bitstream, could not find a sync word. Bitstream must be a byte swapped .bin file\n");
 			err = -EINVAL;
@@ -493,14 +493,15 @@ static int zynq_fpga_ops_write_complete(struct fpga_manager *mgr,
 	if (err)
 		return err;
 
-	/* Release 'PR' control back to the ICAP */
-	zynq_fpga_write(priv, CTRL_OFFSET,
-		zynq_fpga_read(priv, CTRL_OFFSET) & ~CTRL_PCAP_PR_MASK);
-
 	err = zynq_fpga_poll_timeout(priv, INT_STS_OFFSET, intr_status,
 				     intr_status & IXR_PCFG_DONE_MASK,
 				     INIT_POLL_DELAY,
 				     INIT_POLL_TIMEOUT);
+
+	/* Release 'PR' control back to the ICAP */
+	zynq_fpga_write(priv, CTRL_OFFSET,
+			zynq_fpga_read(priv, CTRL_OFFSET)
+			& ~CTRL_PCAP_PR_MASK);
 
 	clk_disable(priv->clk);
 

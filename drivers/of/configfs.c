@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Configfs entries for device-tree
  *
@@ -14,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/spinlock.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <linux/configfs.h>
@@ -23,7 +25,6 @@
 #include <linux/file.h>
 #include <linux/vmalloc.h>
 #include <linux/firmware.h>
-#include <linux/sizes.h>
 
 #include "of_private.h"
 
@@ -38,23 +39,40 @@ struct cfs_overlay_item {
 
 	void			*dtbo;
 	int			dtbo_size;
+
+	void			*mem;
 };
 
-static inline struct cfs_overlay_item *to_cfs_overlay_item(
-		struct config_item *item)
+static DEFINE_MUTEX(overlay_lock);
+
+static int create_overlay(struct cfs_overlay_item *overlay, void *blob)
+{
+	int err;
+
+	/* FIXME */
+	err = of_overlay_fdt_apply(blob, overlay->dtbo_size, &overlay->ov_id);
+	if (err < 0) {
+		pr_err("%s: Failed to create overlay (err=%d)\n",
+		       __func__, err);
+		return err;
+	}
+
+	return err;
+}
+
+static inline struct cfs_overlay_item
+		*to_cfs_overlay_item(struct config_item *item)
 {
 	return item ? container_of(item, struct cfs_overlay_item, item) : NULL;
 }
 
-static ssize_t cfs_overlay_item_path_show(struct config_item *item,
-		char *page)
+static ssize_t cfs_overlay_item_path_show(struct config_item *item, char *page)
 {
-	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
-	return sprintf(page, "%s\n", overlay->path);
+	return sprintf(page, "%s\n", to_cfs_overlay_item(item)->path);
 }
 
 static ssize_t cfs_overlay_item_path_store(struct config_item *item,
-		const char *page, size_t count)
+					   const char *page, size_t count)
 {
 	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
 	const char *p = page;
@@ -80,9 +98,9 @@ static ssize_t cfs_overlay_item_path_store(struct config_item *item,
 	if (err != 0)
 		goto out_err;
 
-	err = of_overlay_fdt_apply((void *)overlay->fw->data,
-				   (u32)overlay->fw->size, &overlay->ov_id);
-	if (err != 0)
+	overlay->dtbo_size = overlay->fw->size;
+	err = create_overlay(overlay, (void *)overlay->fw->data);
+	if (err < 0)
 		goto out_err;
 
 	return count;
@@ -93,16 +111,15 @@ out_err:
 	overlay->fw = NULL;
 
 	overlay->path[0] = '\0';
-	return err;
+
+	return count;
 }
 
 static ssize_t cfs_overlay_item_status_show(struct config_item *item,
-		char *page)
+					    char *page)
 {
-	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
-
-	return sprintf(page, "%s\n",
-			overlay->ov_id > 0 ? "applied" : "unapplied");
+	return sprintf(page, "%s\n", to_cfs_overlay_item(item)->ov_id >= 0 ?
+					"applied" : "unapplied");
 }
 
 CONFIGFS_ATTR(cfs_overlay_item_, path);
@@ -115,18 +132,17 @@ static struct configfs_attribute *cfs_overlay_attrs[] = {
 };
 
 ssize_t cfs_overlay_item_dtbo_read(struct config_item *item,
-		void *buf, size_t max_count)
+				   void *buf, size_t max_count)
 {
 	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
 
-	pr_debug("%s: buf=%p max_count=%zu\n", __func__,
-			buf, max_count);
+	pr_debug("%s: buf=%p max_count=%zu\n", __func__, buf, max_count);
 
-	if (overlay->dtbo == NULL)
+	if (!overlay->dtbo)
 		return 0;
 
 	/* copy if buffer provided */
-	if (buf != NULL) {
+	if (buf) {
 		/* the buffer must be large enough */
 		if (overlay->dtbo_size > max_count)
 			return -ENOSPC;
@@ -138,7 +154,7 @@ ssize_t cfs_overlay_item_dtbo_read(struct config_item *item,
 }
 
 ssize_t cfs_overlay_item_dtbo_write(struct config_item *item,
-		const void *buf, size_t count)
+				    const void *buf, size_t count)
 {
 	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
 	int err;
@@ -149,14 +165,13 @@ ssize_t cfs_overlay_item_dtbo_write(struct config_item *item,
 
 	/* copy the contents */
 	overlay->dtbo = kmemdup(buf, count, GFP_KERNEL);
-	if (overlay->dtbo == NULL)
+	if (!overlay->dtbo)
 		return -ENOMEM;
 
 	overlay->dtbo_size = count;
 
-	err = of_overlay_fdt_apply(overlay->dtbo, overlay->dtbo_size,
-				   &overlay->ov_id);
-	if (err != 0)
+	err = create_overlay(overlay, overlay->dtbo);
+	if (err < 0)
 		goto out_err;
 
 	return count;
@@ -165,7 +180,6 @@ out_err:
 	kfree(overlay->dtbo);
 	overlay->dtbo = NULL;
 	overlay->dtbo_size = 0;
-	overlay->ov_id = 0;
 
 	return err;
 }
@@ -181,17 +195,18 @@ static void cfs_overlay_release(struct config_item *item)
 {
 	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
 
-	if (overlay->ov_id > 0)
+	if (overlay->ov_id >= 0)
 		of_overlay_remove(&overlay->ov_id);
 	if (overlay->fw)
 		release_firmware(overlay->fw);
 	/* kfree with NULL is safe */
 	kfree(overlay->dtbo);
+	kfree(overlay->mem);
 	kfree(overlay);
 }
 
 static struct configfs_item_operations cfs_overlay_item_ops = {
-	.release	= cfs_overlay_release,
+	.release		= cfs_overlay_release,
 };
 
 static struct config_item_type cfs_overlay_type = {
@@ -201,21 +216,23 @@ static struct config_item_type cfs_overlay_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
-static struct config_item *cfs_overlay_group_make_item(
-		struct config_group *group, const char *name)
+static struct config_item
+	*cfs_overlay_group_make_item(struct config_group *group,
+				     const char *name)
 {
 	struct cfs_overlay_item *overlay;
 
 	overlay = kzalloc(sizeof(*overlay), GFP_KERNEL);
 	if (!overlay)
 		return ERR_PTR(-ENOMEM);
-
+	overlay->ov_id = -1;
 	config_item_init_type_name(&overlay->item, name, &cfs_overlay_type);
+
 	return &overlay->item;
 }
 
 static void cfs_overlay_group_drop_item(struct config_group *group,
-		struct config_item *item)
+					struct config_item *item)
 {
 	struct cfs_overlay_item *overlay = to_cfs_overlay_item(item);
 
@@ -261,9 +278,9 @@ static int __init of_cfs_init(void)
 
 	config_group_init(&of_cfs_subsys.su_group);
 	config_group_init_type_name(&of_cfs_overlay_group, "overlays",
-			&overlays_type);
+				    &overlays_type);
 	configfs_add_default_group(&of_cfs_overlay_group,
-			&of_cfs_subsys.su_group);
+				   &of_cfs_subsys.su_group);
 
 	ret = configfs_register_subsystem(&of_cfs_subsys);
 	if (ret != 0) {

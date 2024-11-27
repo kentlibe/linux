@@ -68,9 +68,9 @@ enum {
 
 /*
  * struct pwm_state - state of a PWM channel
- * @period: PWM period (with the time unit expressed in ->time_unit)
- * @duty_cycle: PWM duty cycle (with the time unit expressed in ->time_unit)
- * @phase: PWM phase (with the time unit expressed in ->time_unit)
+ * @period: PWM period (in nanoseconds)
+ * @duty_cycle: PWM duty cycle (in nanoseconds)
+ * @phase: PWM phase (in nanoseconds)
  * @polarity: PWM polarity
  * @time_unit: PWM time unit
  * @enabled: PWM enabled status
@@ -253,8 +253,6 @@ static inline void pwm_init_state(const struct pwm_device *pwm,
 	state->polarity = args.polarity;
 	state->duty_cycle = 0;
 	state->phase = 0;
-	/* Set the default time unit to nsec ensuring backward compatibility */
-	state->time_unit = PWM_UNIT_NSEC;
 	state->usage_power = false;
 }
 
@@ -615,8 +613,7 @@ static inline void pwm_apply_args(struct pwm_device *pwm)
 	state.enabled = false;
 	state.polarity = pwm->args.polarity;
 	state.period = pwm->args.period;
-	state.phase = pwm->args.phase;
-	state.time_unit = pwm->args.time_unit;
+	state.phase = 0;
 	state.usage_power = false;
 
 	pwm_apply_state(pwm, &state);

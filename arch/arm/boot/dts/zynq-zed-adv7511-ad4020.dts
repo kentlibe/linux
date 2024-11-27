@@ -49,23 +49,10 @@
 		interrupt-parent = <&intc>;
 		interrupts = <0 57 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&clkc 17>;
-
-		adi,channels {
-			#size-cells = <0>;
-			#address-cells = <1>;
-
-			dma-channel@0 {
-				reg = <0>;
-				adi,source-bus-width = <32>;
-				adi,source-bus-type = <1>;
-				adi,destination-bus-width = <64>;
-				adi,destination-bus-type = <0>;
-			};
-		};
 	};
 
 	axi_pwm_gen: axi-pwm-gen@44b00000 {
-		compatible = "adi,axi-pwmgen";
+		compatible = "adi,axi-pwmgen-2.00.a";
 		reg = <0x44b00000 0x1000>;
 		label = "adc_conversion_trigger";
 		#pwm-cells = <2>;
@@ -82,7 +69,7 @@
 	};
 
 	axi_spi_engine_0: spi@44a00000 {
-		compatible = "adi,axi-spi-engine-1.00.a";
+		compatible = "adi-ex,axi-spi-engine-1.00.a";
 		reg = <0x44a00000 0x1000>;
 		interrupt-parent = <&intc>;
 		interrupts = <0 56 IRQ_TYPE_LEVEL_HIGH>;
@@ -99,7 +86,7 @@
 			spi-max-frequency = <80000000>;
 			vdd-supply = <&adc_vdd>;
 			vio-supply = <&adc_vio>;
-			vref-supply = <&adc_vref>;
+			ref-supply = <&adc_vref>;
 			dmas = <&rx_dma 0>;
 			dma-names = "rx";
 			clocks = <&spi_clk>;

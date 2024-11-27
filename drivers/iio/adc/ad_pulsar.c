@@ -14,7 +14,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
 #include <linux/err.h>
-#include <linux/gpio/consumer.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -136,24 +135,6 @@ static const struct ad_pulsar_chip_info ad7988_1_chip_info = {
 	.sclk_rate = 80000000
 };
 
-static const struct ad_pulsar_chip_info ad7986_chip_info = {
-	.name = "ad7986",
-	.input_type = DIFFERENTIAL,
-	.max_rate = 2000000,
-	.resolution = 18,
-	.num_channels = 1,
-	.sclk_rate = 80000000
-};
-
-static const struct ad_pulsar_chip_info ad7985_chip_info = {
-	.name = "ad7985",
-	.input_type = DIFFERENTIAL,
-	.max_rate = 2500000,
-	.resolution = 16,
-	.num_channels = 1,
-	.sclk_rate = 80000000
-};
-
 static const struct ad_pulsar_chip_info ad7984_chip_info = {
 	.name = "ad7984",
 	.input_type = DIFFERENTIAL,
@@ -205,15 +186,6 @@ static const struct ad_pulsar_chip_info ad7946_chip_info = {
 	.name = "ad7946",
 	.input_type = SINGLE_ENDED,
 	.max_rate = 500000,
-	.resolution = 14,
-	.num_channels = 1,
-	.sclk_rate = 40000000
-};
-
-static const struct ad_pulsar_chip_info ad7944_chip_info = {
-	.name = "ad7944",
-	.input_type = SINGLE_ENDED,
-	.max_rate = 25000000,
 	.resolution = 14,
 	.num_channels = 1,
 	.sclk_rate = 40000000
@@ -355,7 +327,6 @@ struct ad_pulsar_adc {
 	const struct ad_pulsar_chip_info *info;
 	struct iio_chan_spec *channels;
 	struct spi_transfer *seq_xfer;
-	struct gpio_desc *turbo_gpio;
 	unsigned int cfg;
 	unsigned long ref_clk_rate;
 	struct pwm_device *cnv;
@@ -452,24 +423,47 @@ static int ad_pulsar_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 
 static int ad_pulsar_set_samp_freq(struct ad_pulsar_adc *adc, int freq)
 {
-	unsigned long long target, ref_clk_period_ps;
+	unsigned long long ref_clk_period_ns;
 	struct pwm_state cnv_state;
 	int ret;
+	u32 rem;
 
-	freq = clamp(freq, 0, adc->info->max_rate);
-	target = DIV_ROUND_CLOSEST_ULL(adc->ref_clk_rate, freq);
-	ref_clk_period_ps = DIV_ROUND_CLOSEST_ULL(1000000000000,
-						  adc->ref_clk_rate);
-	cnv_state.period = ref_clk_period_ps * target;
-	cnv_state.duty_cycle = ref_clk_period_ps;
-	cnv_state.phase = ref_clk_period_ps;
-	cnv_state.time_unit = PWM_UNIT_PSEC;
-	cnv_state.enabled = true;
+	/*
+	 * The objective here is to configure the PWM such that we don't have
+	 * more than $freq periods per second and duty_cycle and phase should be
+	 * their minimal positive value.
+	 *
+	 * When a period P (measured in ns) is passed to pwm_apply_state(), the
+	 * actually implemented period is:
+	 *
+	 * 	round_down(P * R / NSEC_PER_SEC) / R
+	 *
+	 * (measured in s) with R = adc->ref_clk_rate. We want
+	 *
+	 * 	  round_down(P * R / NSEC_PER_SEC) / R ≥ 1 / freq
+	 *	⟺ round_down(P * R / NSEC_PER_SEC) ≥ R / freq
+	 *	⟺ P * R / NSEC_PER_SEC ≥ round_up(R / freq)
+	 *	⟺ P ≥ round_up(R / freq) * NSEC_PER_SEC / R
+	 */
+	freq = clamp(freq, 1, adc->info->max_rate);
+	ref_clk_period_ns = DIV_ROUND_UP(NSEC_PER_SEC, adc->ref_clk_rate);
+
+	cnv_state = (struct pwm_state){
+		.duty_cycle = ref_clk_period_ns,
+		.phase = ref_clk_period_ns,
+		.enabled = true,
+	};
+
+	cnv_state.period = div_u64_rem((u64)DIV_ROUND_UP(adc->ref_clk_rate, freq) * NSEC_PER_SEC,
+				       adc->ref_clk_rate, &rem);
+	if (rem)
+		cnv_state.period += 1;
+
 	ret = pwm_apply_state(adc->cnv, &cnv_state);
 	if (ret)
 		return ret;
 
-	adc->samp_freq = DIV_ROUND_CLOSEST_ULL(adc->ref_clk_rate, target);
+	adc->samp_freq = freq;
 
 	return ret;
 }
@@ -947,28 +941,18 @@ static int ad_pulsar_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	/* REVISIT: for now, turbo mode is always enabled */
-	adc->turbo_gpio = devm_gpiod_get_optional(&spi->dev, "turbo",
-						  GPIOD_OUT_HIGH);
-	if (IS_ERR(adc->turbo_gpio))
-		return dev_err_probe(&spi->dev, PTR_ERR(adc->turbo_gpio),
-				     "Failed to get turbo GPIO\n");
-
 	return devm_iio_device_register(&spi->dev, indio_dev);
 }
 
 static const struct of_device_id ad_pulsar_of_match[] = {
 	{ .compatible = "adi,pulsar,ad7988-5", .data = &ad7988_5_chip_info },
 	{ .compatible = "adi,pulsar,ad7988-1", .data = &ad7988_1_chip_info },
-	{ .compatible = "adi,pulsar,ad7986", .data = &ad7986_chip_info },
-	{ .compatible = "adi,pulsar,ad7985", .data = &ad7985_chip_info },
 	{ .compatible = "adi,pulsar,ad7984", .data = &ad7984_chip_info },
 	{ .compatible = "adi,pulsar,ad7983", .data = &ad7983_chip_info },
 	{ .compatible = "adi,pulsar,ad7982", .data = &ad7982_chip_info },
 	{ .compatible = "adi,pulsar,ad7980", .data = &ad7980_chip_info },
 	{ .compatible = "adi,pulsar,ad7949", .data = &ad7949_chip_info },
 	{ .compatible = "adi,pulsar,ad7946", .data = &ad7946_chip_info },
-	{ .compatible = "adi,pulsar,ad7944", .data = &ad7944_chip_info },
 	{ .compatible = "adi,pulsar,ad7942", .data = &ad7942_chip_info },
 	{ .compatible = "adi,pulsar,ad7699", .data = &ad7699_chip_info },
 	{ .compatible = "adi,pulsar,ad7694", .data = &ad7694_chip_info },

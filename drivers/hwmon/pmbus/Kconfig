@@ -215,9 +215,9 @@ config SENSORS_LTC2978_REGULATOR
 	depends on SENSORS_LTC2978 && REGULATOR
 	help
 	  If you say yes here you get regulator support for Linear Technology
-	  LTC3880, LTC3883, LTC3884, LTC3886, LTC3887, LTC3889, LTC7880,
-	  LTM4644, LTM4675, LTM4676, LTM4677, LTM4678, LTM4680, LTM4686,
-	  and LTM4700.
+	  LTC3880, LTC3883, LTC3884, LTC3886, LTC3887, LTC3889, LTC7841,
+	  LTC7880, LTM4644, LTM4675, LTM4676, LTM4677, LTM4678, LTM4680,
+	  LTM4686, and LTM4700.
 
 config SENSORS_LTC3815
 	tristate "Linear Technologies LTC3815"
@@ -415,6 +415,26 @@ config SENSORS_TPS546D24
 
 	  This driver can also be built as a module. If so, the module will
 	  be called tps546d24
+
+config SENSORS_TPS544
+	tristate "TI TPS544"
+	help
+	  If you say yes here you get hardware monitoring support for Texas
+	  Instruments TPS544.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called tps544.
+
+config SENSORS_TPS544_REGULATOR
+	bool "Regulator support for TPS544"
+	depends on SENSORS_TPS544
+	select REGULATOR
+	help
+	  If you say yes here you get regulator support for Texas Instruments
+	  TPS544.
+
+	  This driver is dependent on TPS544 sensor and it can also be built
+	  as a module.
 
 config SENSORS_UCD9000
 	tristate "TI UCD90120, UCD90124, UCD90160, UCD90320, UCD9090, UCD90910"

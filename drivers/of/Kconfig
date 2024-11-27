@@ -97,8 +97,12 @@ config OF_DMA_DEFAULT_COHERENT
 config OF_CONFIGFS
 	bool "Device Tree Overlay ConfigFS interface"
 	select CONFIGFS_FS
-	select OF_OVERLAY
+	depends on OF_OVERLAY
 	help
-	  Enable a simple user-space driven DT overlay interface.
+	  Select this option to enable simple user-space driven DT overlay
+	  interface to support device tree manipulated at runtime.
+	  Say Y here to include this support.
+
+	  If unsure, say N.
 
 endif # OF

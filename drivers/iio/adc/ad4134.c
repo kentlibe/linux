@@ -95,9 +95,8 @@ static int _ad4134_set_odr(struct ad4134_state *st, unsigned int odr)
 	 * tODR_HIGH_TIME = 3 * tDIGCLK
 	 * See datasheet page 10, Table 3. Data Interface Timing with Gated DCLK.
 	 */
-	state.duty_cycle = DIV_ROUND_CLOSEST_ULL(PICO * 6, st->sys_clk_rate);
-	state.period = DIV_ROUND_CLOSEST_ULL(PICO, odr);
-	state.time_unit = PWM_UNIT_PSEC;
+	state.duty_cycle = DIV_ROUND_CLOSEST_ULL(6ULL * NSEC_PER_SEC, st->sys_clk_rate);
+	state.period = DIV_ROUND_CLOSEST(NSEC_PER_SEC, odr);
 
 	ret = pwm_apply_state(st->odr_pwm, &state);
 	if (ret)
@@ -261,11 +260,6 @@ static void ad4134_disable_regulators(void *data)
 	regulator_bulk_disable(ARRAY_SIZE(st->regulators), st->regulators);
 }
 
-static void ad4134_disable_clk(void *data)
-{
-	clk_disable_unprepare(data);
-}
-
 static void ad4134_disable_pwm(void *data)
 {
 	pwm_disable(data);
@@ -278,18 +272,9 @@ static int ad4134_setup(struct ad4134_state *st)
 	struct clk *clk;
 	int ret;
 
-	clk = devm_clk_get(dev, "sys_clk");
+	clk = devm_clk_get_enabled(dev, "sys_clk");
 	if (IS_ERR(clk))
 		return dev_err_probe(dev, PTR_ERR(clk), "Failed to find SYS clock\n");
-
-	ret = clk_prepare_enable(clk);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to enable SYS clock\n");
-
-	ret = devm_add_action_or_reset(dev, ad4134_disable_clk, clk);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "Failed to add SYS clock disable action\n");
 
 	st->sys_clk_rate = clk_get_rate(clk);
 	if (!st->sys_clk_rate)

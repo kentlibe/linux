@@ -479,6 +479,9 @@ static int __init ttc_timer_init(struct device_node *timer)
 	int clksel, ret;
 	u32 timer_width = 16;
 
+	if (of_property_read_bool(timer, "#pwm-cells"))
+		return -ENODEV;
+
 	if (initialized)
 		return 0;
 
@@ -531,12 +534,5 @@ static int __init ttc_timer_init(struct device_node *timer)
 	pr_info("%pOFn #0 at %p, irq=%d\n", timer, timer_baseaddr, irq);
 
 	return 0;
-
-put_clk_ce:
-	clk_put(clk_ce);
-put_clk_cs:
-	clk_put(clk_cs);
-	return ret;
-}
 
 TIMER_OF_DECLARE(ttc, "cdns,ttc", ttc_timer_init);

@@ -26,7 +26,15 @@
 
 #define LTC2387_VREF		4096
 #define LTC2387_T_CNVH		8
-#define LTC2387_T_FIRSTCLK	70
+
+/*
+ * Minimal value for t_{FIRSTCLK} according to
+ * https://www.analog.com/media/en/technical-documentation/data-sheets/238718fa.pdf
+ * is 65 ns. Add some slack because there is some rounding involved in the PWM
+ * driver. With the PWM driver rounding to the nearest possible value, targeting
+ * 70 ns works for input clk rates >= 100 MHz.
+ */
+#define LTC2387_T_FIRSTCLK_NS	70
 
 #define KHz 1000
 #define MHz (1000 * KHz)
@@ -145,18 +153,44 @@ struct ltc2387_dev {
 
 static int ltc2387_set_sampling_freq(struct ltc2387_dev *ltc, int freq)
 {
-	unsigned long long target, ref_clk_period_ps;
+	unsigned long long ref_clk_period_ns;
 	struct pwm_state clk_en_state, cnv_state;
 	int ret, clk_en_time;
+	u32 rem;
 
-	target = DIV_ROUND_CLOSEST_ULL(ltc->ref_clk_rate, freq);
-	ref_clk_period_ps = DIV_ROUND_CLOSEST_ULL(1000000000000ULL,
-						  ltc->ref_clk_rate);
-	cnv_state.period = ref_clk_period_ps * target;
-	cnv_state.duty_cycle = ref_clk_period_ps;
-	cnv_state.phase = 0;
-	cnv_state.time_unit = PWM_UNIT_PSEC;
-	cnv_state.enabled = true;
+	ref_clk_period_ns = DIV_ROUND_UP(NSEC_PER_SEC, ltc->ref_clk_rate);
+
+	cnv_state = (struct pwm_state) {
+		.duty_cycle = ref_clk_period_ns,
+		.enabled = true,
+	};
+
+	/*
+	 * The goal here is that the PWM is configured with a minimal period not
+	 * less than 1 / freq (with freq measured in Hz).
+	 *
+	 * When a period P (measured in ns) is passed to pwm_apply_state(), the
+	 * actually implemented period is:
+	 *
+	 *      round_down(P * R / NSEC_PER_SEC) / R
+	 *
+	 * (measured in s) with R = ltc->ref_clk_rate. So we have:
+	 *
+	 *        round_down(P * R / NSEC_PER_SEC) / R ≥ 1 / freq
+	 *      ⟺ round_down(P * R / NSEC_PER_SEC) ≥ R / freq
+	 *
+	 * With the LHS being integer this is equivalent to:
+	 *
+	 *        round_down(P * R / NSEC_PER_SEC) ≥ round_up(R / freq)
+	 *      ⟺ P * R / NSEC_PER_SEC ≥ round_up(R / freq)
+	 *      ⟺ P ≥ round_up(R / freq) * NSEC_PER_SEC / R
+	 */
+
+	cnv_state.period = div_u64_rem((u64)DIV_ROUND_UP(ltc->ref_clk_rate, freq) * NSEC_PER_SEC,
+				       ltc->ref_clk_rate, &rem);
+	if (rem)
+		cnv_state.period += 1;
+
 	ret = pwm_apply_state(ltc->cnv, &cnv_state);
 	if (ret < 0)
 		return ret;
@@ -166,16 +200,19 @@ static int ltc2387_set_sampling_freq(struct ltc2387_dev *ltc, int freq)
 		clk_en_time = DIV_ROUND_UP_ULL(ltc->device_info->resolution, 4);
 	else
 		clk_en_time = DIV_ROUND_UP_ULL(ltc->device_info->resolution, 2);
-	clk_en_state.period = cnv_state.period;
-	clk_en_state.duty_cycle = ref_clk_period_ps * clk_en_time;
-	clk_en_state.phase = cnv_state.phase + LTC2387_T_FIRSTCLK;
-	clk_en_state.time_unit = PWM_UNIT_PSEC;
-	clk_en_state.enabled = true;
+
+	clk_en_state = (struct pwm_state) {
+		.period = cnv_state.period,
+		.duty_cycle = ref_clk_period_ns * clk_en_time,
+		.phase = LTC2387_T_FIRSTCLK_NS,
+		.enabled = true,
+	};
+
 	ret = pwm_apply_state(ltc->clk_en, &clk_en_state);
 	if (ret < 0)
 		return ret;
 
-	ltc->sampling_freq = DIV_ROUND_CLOSEST_ULL(ltc->ref_clk_rate, target);
+	ltc->sampling_freq = freq;
 
 	return 0;
 }

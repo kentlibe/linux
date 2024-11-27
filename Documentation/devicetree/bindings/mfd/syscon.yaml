@@ -69,6 +69,8 @@ properties:
               - samsung,exynos5433-sysreg
               - samsung,exynos850-sysreg
               - samsung,exynosautov9-sysreg
+              - xlnx,zynqmp-dpaud-setting
+              - xlnx,hdcp-keymngmt-blk-1.0
 
           - const: syscon
 

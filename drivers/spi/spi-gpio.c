@@ -235,7 +235,7 @@ static void spi_gpio_chipselect(struct spi_device *spi, int is_active)
 
 	/* Drive chip select line, if we have one */
 	if (spi_gpio->cs_gpios) {
-		struct gpio_desc *cs = spi_gpio->cs_gpios[spi->chip_select];
+		struct gpio_desc *cs = spi_gpio->cs_gpios[spi_get_chipselect(spi, 0)];
 
 		/* SPI chip selects are normally active-low */
 		gpiod_set_value_cansleep(cs, (spi->mode & SPI_CS_HIGH) ? is_active : !is_active);
@@ -243,6 +243,14 @@ static void spi_gpio_chipselect(struct spi_device *spi, int is_active)
 
 	if (spi_gpio->sck_idle_input && !is_active)
 		gpiod_direction_input(spi_gpio->sck);
+}
+
+static void spi_gpio_set_mosi_idle(struct spi_device *spi)
+{
+	struct spi_gpio *spi_gpio = spi_to_spi_gpio(spi);
+
+	gpiod_set_value_cansleep(spi_gpio->mosi,
+				 !!(spi->mode & SPI_MOSI_IDLE_HIGH));
 }
 
 static int spi_gpio_setup(struct spi_device *spi)
@@ -256,7 +264,7 @@ static int spi_gpio_setup(struct spi_device *spi)
 	 * initialized from the descriptor lookup.
 	 */
 	if (spi_gpio->cs_gpios) {
-		cs = spi_gpio->cs_gpios[spi->chip_select];
+		cs = spi_gpio->cs_gpios[spi_get_chipselect(spi, 0)];
 		if (!spi->controller_state && cs)
 			status = gpiod_direction_output(cs,
 						  !(spi->mode & SPI_CS_HIGH));
@@ -421,7 +429,8 @@ static int spi_gpio_probe(struct platform_device *pdev)
 
 	master->bits_per_word_mask = SPI_BPW_RANGE_MASK(1, 32);
 	master->mode_bits = SPI_3WIRE | SPI_3WIRE_HIZ | SPI_CPHA | SPI_CPOL |
-			    SPI_CS_HIGH | SPI_LSB_FIRST;
+			  SPI_CS_HIGH | SPI_LSB_FIRST | SPI_MOSI_IDLE_LOW |
+			  SPI_MOSI_IDLE_HIGH;
 	if (!spi_gpio->mosi) {
 		/* HW configuration without MOSI pin
 		 *
@@ -446,6 +455,7 @@ static int spi_gpio_probe(struct platform_device *pdev)
 	master->flags |= SPI_MASTER_GPIO_SS;
 	bb->chipselect = spi_gpio_chipselect;
 	bb->set_line_direction = spi_gpio_set_direction;
+	bb->set_mosi_idle = spi_gpio_set_mosi_idle;
 
 	if (master->flags & SPI_MASTER_NO_TX) {
 		bb->txrx_word[SPI_MODE_0] = spi_gpio_spec_txrx_word_mode0;

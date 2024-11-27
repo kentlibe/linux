@@ -25,15 +25,13 @@
 		regulator-always-on;
 	};
 
-	clocks {
-		ad7768_1_mclk: clock@0 {
-			#clock-cells = <0>;
-			compatible = "fixed-clock";
-			clock-frequency = <16384000>;
-		};
+	ad7768_1_mclk: ad7768-1-mclk {
+		#clock-cells = <0>;
+		compatible = "fixed-clock";
+		clock-frequency = <16384000>;
 	};
 
-	one-bit-adc-dac@0 {
+	one-bit-adc-dac {
 		compatible = "adi,one-bit-adc-dac";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -90,30 +88,16 @@
 };
 
 &fpga_axi {
-
-	axi_dmac_0: rx-dma@0x00020000 {
+	axi_dmac_0: rx-dma@20000 {
 		compatible = "adi,axi-dmac-1.00.a";
 		reg = <0x00020000 0x00000800>;
 		interrupt-parent = <&intc>;
 		interrupts = <0 44 IRQ_TYPE_LEVEL_HIGH>;
 		#dma-cells = <1>;
 		clocks = <&h2f_user0_clk>;
-
-		adi,channels {
-			#size-cells = <0>;
-			#address-cells = <1>;
-
-			dma-channel@0 {
-				reg = <0>;
-				adi,source-bus-width = <32>;
-				adi,source-bus-type = <1>;
-				adi,destination-bus-width = <64>;
-				adi,destination-bus-type = <0>;
-			};
-		};
 	};
 
-	spi@0x00030000 {
+	spi@30000 {
 		compatible = "adi,axi-spi-engine-1.00.a";
 		reg = <0x00030000 0x00010000>;
 		interrupt-parent = <&intc>;

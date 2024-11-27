@@ -568,8 +568,7 @@ int pwm_apply_state(struct pwm_device *pwm, const struct pwm_state *state)
 	    state->polarity == pwm->state.polarity &&
 	    state->enabled == pwm->state.enabled &&
 	    state->usage_power == pwm->state.usage_power &&
-	    state->phase == pwm->state.phase &&
-	    state->time_unit == pwm->state.time_unit)
+	    state->phase == pwm->state.phase)
 		return 0;
 
 	err = chip->ops->apply(chip, pwm, state);
@@ -1136,12 +1135,9 @@ static void pwm_dbg_show(struct pwm_chip *chip, struct seq_file *s)
 		if (state.enabled)
 			seq_puts(s, " enabled");
 
-		seq_printf(s, " period: %llu %s", state.period,
-			   pwm_time_unit_strings[state.time_unit]);
-		seq_printf(s, " duty: %llu %s", state.duty_cycle,
-			   pwm_time_unit_strings[state.time_unit]);
-		seq_printf(s, " phase: %llu %s", state.phase,
-			   pwm_time_unit_strings[state.time_unit]);
+		seq_printf(s, " period: %llu ns", state.period);
+		seq_printf(s, " duty: %llu ns", state.duty_cycle);
+		seq_printf(s, " phase: %llu ns", state.phase);
 		seq_printf(s, " polarity: %s",
 			   state.polarity ? "inverse" : "normal");
 
