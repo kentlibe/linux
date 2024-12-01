@@ -2403,6 +2403,19 @@ config SENSORS_ASUS_EC
 	  This driver can also be built as a module. If so, the module
 	  will be called asus_ec_sensors.
 
+config MAX42500
+	tristate "MAX42500 Industrial Power System Monitor Family"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  If you say yes here you get support for MAX42500 SoC power-system monitor
+	  with up to seven voltage monitor. The driver also contains a  programmable
+	  challenge/response watchdog, which is accessible through the I2C interface,
+	  along with a configurable RESET output.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called max42500.
+
 endif # ACPI
 
 endif # HWMON
