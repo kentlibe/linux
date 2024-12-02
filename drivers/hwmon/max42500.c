@@ -132,7 +132,7 @@ enum max42500_state {
 
 /* MAX42500 voltage monitor input */
 enum max42500_vm_input {
-	MAX42500_VM1 = 1,
+	MAX42500_VM1,
 	MAX42500_VM2,
 	MAX42500_VM3,
 	MAX42500_VM4,
@@ -358,15 +358,14 @@ static int max42500_set_nominal_voltage(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_get_comp_status(struct max42500_state *st,
-			     enum max42500_vm_input vm_in,
-			     uint8_t *status)
+			     uint8_t vm_in, uint8_t *status)
 {
 	int ret;
 	uint8_t reg_addr;
 	uint8_t vm_in_status;
-	uint8_t comp_stat;
+	enum max42500_comp_stat comp_stat;
 
-	comp_stat = vm_in % MAX42500_COMP_STAT_MAX;
+	comp_stat = (enum max42500_comp_stat)(vm_in % MAX42500_COMP_STAT_MAX);
 	switch (comp_stat) {
 	case MAX42500_COMP_STAT_OFF:
 		reg_addr = MAX42500_REG_STATOFF;
@@ -417,8 +416,8 @@ static int max42500_set_ov_thresh1(struct max42500_state *st,
 						 0.005);
 		return max42500_reg_update(st,
 					   MAX42500_REG_OVUV1 + vm_in,
-					   GENMASK(7,4),
-					   FIELD_PREP(GENMASK(7,4),
+					   GENMASK(7, 4),
+					   FIELD_PREP(GENMASK(7, 4),
 							   ov_val));
 	default:
 		return -EINVAL;
@@ -481,7 +480,7 @@ static int max42500_set_uv_thresh1(struct max42500_state *st,
 						 -0.005);
 		return max42500_reg_update(st,
 					   MAX42500_REG_OVUV1 + vm_in,
-					   GENMASK(3,0),
+					   GENMASK(3, 0),
 					   uv_val);
 	default:
 		return -EINVAL;
@@ -533,7 +532,7 @@ static static int max42500_get_fps_clk_div(struct max42500_state *st,
 	if (ret)
 		return ret;
 
-	*fps_clk_div = (uint8_t)FIELD_GET(GENMASK(2,0), reg_val);
+	*fps_clk_div = (uint8_t)FIELD_GET(GENMASK(2, 0), reg_val);
 
 	return 0;
 }
@@ -685,7 +684,7 @@ static int max42500_set_watchdog_rhld(struct max42500_state *st,
 {
 	return max42500_reg_update(desc,
 				   MAX42500_REG_RSTCTRL,
-				   GENMASK(1,0),
+				   GENMASK(1, 0),
 				   rhld);
 }
 
@@ -845,7 +844,7 @@ static int max42500_write(struct device *dev, enum hwmon_sensor_types type, u32 
 	}
 }
 
-static struct max42500_state max42500_config = {
+static const struct max42500_state max42500_config = {
 	.client = NULL,
 	.pece = true,
 	.vmon_en = true,
@@ -869,145 +868,29 @@ static const struct hwmon_ops max42500_hwmon_ops = {
 	.write = max42500_write,
 };
 
-static const enum max42500_vm_input set_nominal_voltage_config[] = {
-	HWMON_I_INPUT,
-	HWMON_I_INPUT,
-	HWMON_I_INPUT,
-	HWMON_I_INPUT,
-	HWMON_I_INPUT,
-	0,
-};
-
-static const struct hwmon_channel_info set_nominal_voltage = {
-    .type = hwmon_in,
-    .config = set_nominal_voltage_config,
-};
-
-static const enum max42500_vm_input get_comp_status_config[] = {
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	HWMON_I_LABEL,
-	0,
-};
-
-static const struct hwmon_channel_info get_comp_status = {
-    .type = hwmon_in,
-    .config = get_comp_status_config,
-};
-
-static const enum max42500_vm_input set_ov_thresh1_config[] = {
-	HWMON_I_LOWEST,
-	HWMON_I_LOWEST,
-	HWMON_I_LOWEST,
-	HWMON_I_LOWEST,
-	HWMON_I_LOWEST,
-	0,
-};
-
-static const struct hwmon_channel_info set_ov_thresh1 = {
-    .type = hwmon_in,
-    .config = set_ov_thresh1_config,
-};
-
-static const enum max42500_vm_input set_ov_thresh2_config[] = {
-	HWMON_I_HIGHEST,
-	HWMON_I_HIGHEST,
-	0,
-};
-
-static const struct hwmon_channel_info set_ov_thresh2 = {
-    .type = hwmon_in,
-    .config = set_ov_thresh2_config,
-};
-
-static const enum max42500_vm_input set_uv_thresh1_config[] = {
-	HWMON_I_MIN,
-	HWMON_I_MIN,
-	HWMON_I_MIN,
-	HWMON_I_MIN,
-	HWMON_I_MIN,
-	0,
-};
-
-static const struct hwmon_channel_info set_uv_thresh1 = {
-    .type = hwmon_in,
-    .config = set_uv_thresh1_config,
-};
-
-static const enum max42500_vm_input set_uv_thresh2_config[] = {
-	HWMON_I_MAX,
-	HWMON_I_MAX,
-	0,
-};
-
-static const struct hwmon_channel_info set_uv_thresh2 = {
-    .type = hwmon_in,
-    .config = set_uv_thresh2_config,
-};
-
-static const enum max42500_vm_input get_power_up_timestamp_config[] = {
-	HWMON_C_IN_RESET_HISTORY,
-	HWMON_C_IN_RESET_HISTORY,
-	HWMON_C_IN_RESET_HISTORY,
-	HWMON_C_IN_RESET_HISTORY,
-	HWMON_C_IN_RESET_HISTORY,
-	HWMON_C_IN_RESET_HISTORY,
-	HWMON_C_IN_RESET_HISTORY,
-	0,
-};
-
-static const struct hwmon_channel_info get_power_up_timestamp = {
-    .type = hwmon_in,
-    .config = get_power_up_timestamp_config,
-};
-
-static const enum max42500_vm_input get_power_down_timestamp_config[] = {
-	HWMON_C_CURR_RESET_HISTORY,
-	HWMON_C_CURR_RESET_HISTORY,
-	HWMON_C_CURR_RESET_HISTORY,
-	HWMON_C_CURR_RESET_HISTORY,
-	HWMON_C_CURR_RESET_HISTORY,
-	HWMON_C_CURR_RESET_HISTORY,
-	HWMON_C_CURR_RESET_HISTORY,
-	0,
-};
-
-static const struct hwmon_channel_info get_power_down_timestamp = {
-    .type = hwmon_in,
-    .config = get_power_down_timestamp_config,
-};
-
 static const struct hwmon_channel_info *max42500_info[] = {
 	HWMON_CHANNEL_INFO(chip,
-			   HWMON_C_TEMP_RESET_HISTORY | &get_power_up_timestamp |
-			   &get_power_down_timestamp | HWMON_C_POWER_RESET_HISTORY |
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY | 
+			   HWMON_C_TEMP_RESET_HISTORY | HWMON_C_POWER_RESET_HISTORY |
 			   HWMON_C_REGISTER_TZ | HWMON_C_UPDATE_INTERVAL | HWMON_C_ALARMS,
-			   HWMON_C_TEMP_RESET_HISTORY | &get_power_up_timestamp |
-			   &get_power_down_timestamp | HWMON_C_POWER_RESET_HISTORY |
-			   HWMON_C_REGISTER_TZ | HWMON_C_UPDATE_INTERVAL | HWMON_C_ALARMS),
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY),
 	HWMON_CHANNEL_INFO(in,
-			   &set_nominal_voltage | &set_ov_thresh1 | &set_ov_thresh2 | &set_uv_thresh1 |
-			   &set_uv_thresh2 | &get_comp_status,
-			   &set_nominal_voltage | &set_ov_thresh1 | &set_ov_thresh2 | &set_uv_thresh1 |
-			   &set_uv_thresh2 | &get_comp_status),
+			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN | 
+			   HWMON_I_HIGHEST | HWMON_I_MAX,
+			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN | 
+			   &HWMON_I_HIGHEST | HWMON_I_MAX,
+			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
+			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
+			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
+			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
+			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
+			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
+			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL),
 	NULL
 };
 
