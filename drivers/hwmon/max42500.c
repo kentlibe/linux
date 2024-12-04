@@ -1,26 +1,23 @@
-// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * MAX42500 - Industrial Power System Monitor
  *
  * Copyright 2024 Analog Devices Inc.
  */
 
-#include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/crc8.h>
-#include <linux/gpio.h>
-
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/err.h>
+#include <linux/gpio.h>
 #include <linux/gpio/driver.h>
 #include <linux/hwmon.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 
@@ -429,8 +426,8 @@ static int max42500_set_ov_thresh1(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_set_ov_thresh2(struct max42500_state *st,
-			    enum max42500_vm_input vm_in,
-			    float thresh)
+				enum max42500_vm_input vm_in,
+				float thresh)
 {
 	uint8_t reg_addr;
 	uint8_t ov_val;
@@ -460,8 +457,8 @@ static int max42500_set_ov_thresh2(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_set_uv_thresh1(struct max42500_state *st,
-			    enum max42500_vm_input vm_in,
-			    float thresh)
+				enum max42500_vm_input vm_in,
+				float thresh)
 {
 	uint8_t uv_val;
 
@@ -479,9 +476,9 @@ static int max42500_set_uv_thresh1(struct max42500_state *st,
 			 DIV_ROUND_CLOSEST(((1 - (thresh / 100)) - 0.975),
 						 -0.005);
 		return max42500_reg_update(st,
-					   MAX42500_REG_OVUV1 + vm_in,
-					   GENMASK(3, 0),
-					   uv_val);
+					MAX42500_REG_OVUV1 + vm_in,
+					GENMASK(3, 0),
+					uv_val);
 	default:
 		return -EINVAL;
 	}
@@ -492,8 +489,8 @@ static int max42500_set_uv_thresh1(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_set_uv_thresh2(struct max42500_state *st,
-			    enum max42500_vm_input vm_in,
-			    float thresh)
+				enum max42500_vm_input vm_in,
+				float thresh)
 {
 	uint8_t reg_addr;
 	uint8_t uv_val;
@@ -523,7 +520,7 @@ static int max42500_set_uv_thresh2(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static static int max42500_get_fps_clk_div(struct max42500_state *st,
-				    uint8_t *fps_clk_div)
+						uint8_t *fps_clk_div)
 {
 	int ret;
 	uint8_t reg_val;
@@ -542,8 +539,8 @@ static static int max42500_get_fps_clk_div(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_get_power_up_timestamp(struct max42500_state *st,
-				    enum max42500_vm_input vm_in,
-				    uint8_t *timestamp)
+					enum max42500_vm_input vm_in,
+					uint8_t *timestamp)
 {
 	int ret;
 	uint8_t reg_val;
@@ -574,8 +571,8 @@ static int max42500_get_power_up_timestamp(struct max42500_state *st,
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_get_power_down_timestamp(struct max42500_state *st,
-				      enum max42500_vm_input vm_in,
-				      uint8_t *timestamp)
+						enum max42500_vm_input vm_in,
+						uint8_t *timestamp)
 {
 	int ret;
 	uint8_t reg_val;
@@ -605,7 +602,8 @@ static int max42500_get_power_down_timestamp(struct max42500_state *st,
  * @brief Enable/Disable watchdog
  * @return 0 in case of success, error code otherwise
  */
-static int max42500_set_watchdog_enable(struct max42500_state *st, bool wd_enable)
+static int max42500_set_watchdog_enable(struct max42500_state *st,
+					bool wd_enable)
 {
 	int ret;
 	uint8_t reg_val;
@@ -627,7 +625,7 @@ static int max42500_set_watchdog_enable(struct max42500_state *st, bool wd_enabl
  * @return 0 in case of success, negative error code otherwise.
  */
 static int max42500_new_watchdog_key(struct max42500_state *st,
-				     uint8_t *new_wd_key)
+					uint8_t *new_wd_key)
 {
 	int ret;
 	uint8_t curr_wd_key;
@@ -642,7 +640,7 @@ static int max42500_new_watchdog_key(struct max42500_state *st,
 			   (curr_wd_key >> 4) ^
 			   (curr_wd_key >> 3)) & 0x01;
 
-	/* Shift existing bits upwards toward MSb and insert the new bit as LSb */
+	/* Shift existing bits upwards toward MSb and insert new bit as LSb */
 	*new_wd_key = (curr_wd_key << 1) | new_bit;
 
 	return 0;
@@ -680,7 +678,7 @@ static int max42500_set_watchdog_key(struct max42500_state *st)
  * @return 0 in case of success, error code otherwise
  */
 static int max42500_set_watchdog_rhld(struct max42500_state *st,
-			       enum max42500_wd_rhld rhld)
+					enum max42500_wd_rhld rhld)
 {
 	return max42500_reg_update(desc,
 				   MAX42500_REG_RSTCTRL,
@@ -688,8 +686,9 @@ static int max42500_set_watchdog_rhld(struct max42500_state *st,
 				   rhld);
 }
 
-static umode_t max42500_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr,
-				  int channel)
+static umode_t max42500_is_visible(const void *data,
+					enum hwmon_sensor_types type,
+					u32 attr, int channel)
 {
 	const struct max42500_state *st = data;
 
@@ -726,7 +725,8 @@ static umode_t max42500_is_visible(const void *data, enum hwmon_sensor_types typ
 	return 0;
 }
 
-static int max42500_read_in(struct device *dev, u32 attr, int channel, long val)
+static int max42500_read_in(struct device *dev, u32 attr, int channel,
+				long val)
 {
 	struct max42500_state *st = dev_get_drvdata(dev);
 
@@ -748,7 +748,8 @@ static int max42500_read_in(struct device *dev, u32 attr, int channel, long val)
 	}
 }
 
-static int max42500_read_chip(struct device *dev, u32 attr, int channel, long val)
+static int max42500_read_chip(struct device *dev, u32 attr, int channel,
+				long val)
 {
 	struct max42500_state *st = dev_get_drvdata(dev);
 
@@ -772,8 +773,8 @@ static int max42500_read_chip(struct device *dev, u32 attr, int channel, long va
 	}
 }
 
-static int max42500_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
-			long *val)
+static int max42500_read(struct device *dev, enum hwmon_sensor_types type,
+				u32 attr, int channel, long *val)
 {
 	switch (type) {
 	case hwmon_chip:
@@ -785,7 +786,8 @@ static int max42500_read(struct device *dev, enum hwmon_sensor_types type, u32 a
 	}
 }
 
-static int max42500_write_in(struct device *dev, u32 attr, int channel, long val)
+static int max42500_write_in(struct device *dev, u32 attr, int channel,
+				long val)
 {
 	struct max42500_state *st = dev_get_drvdata(dev);
 
@@ -807,7 +809,8 @@ static int max42500_write_in(struct device *dev, u32 attr, int channel, long val
 	}
 }
 
-static int max42500_write_chip(struct device *dev, u32 attr, int channel, long val)
+static int max42500_write_chip(struct device *dev, u32 attr, int channel,
+				long val)
 {
 	struct max42500_state *st = dev_get_drvdata(dev);
 
@@ -831,8 +834,8 @@ static int max42500_write_chip(struct device *dev, u32 attr, int channel, long v
 	}
 }
 
-static int max42500_write(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
-			 long val)
+static int max42500_write(struct device *dev, enum hwmon_sensor_types type,
+				u32 attr, int channel, long val)
 {
 	switch (type) {
 	case hwmon_chip:
@@ -850,9 +853,9 @@ static const struct max42500_state max42500_config = {
 	.vmon_en = true,
 	.vmon_vmpd = true,
 	.reset_map = (MAX42500_RSTMAP_IN_MASK(MAX42500_VM2) | \
-                  MAX42500_RSTMAP_IN_MASK(MAX42500_VM3) | \
-                  MAX42500_RSTMAP_IN_MASK(MAX42500_VM4) | \
-                  MAX42500_RSTMAP_PARM_MASK),
+		MAX42500_RSTMAP_IN_MASK(MAX42500_VM3) | \
+		MAX42500_RSTMAP_IN_MASK(MAX42500_VM4) | \
+		MAX42500_RSTMAP_PARM_MASK),
 	.wd_mode = true,
 	.wd_cdiv = 0x0,
 	.wd_close =0x0,
@@ -870,40 +873,39 @@ static const struct hwmon_ops max42500_hwmon_ops = {
 
 static const struct hwmon_channel_info *max42500_info[] = {
 	HWMON_CHANNEL_INFO(chip,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY | 
-			   HWMON_C_TEMP_RESET_HISTORY | HWMON_C_POWER_RESET_HISTORY |
-			   HWMON_C_REGISTER_TZ | HWMON_C_UPDATE_INTERVAL | HWMON_C_ALARMS,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
-			   HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY),
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY | \
+		HWMON_C_TEMP_RESET_HISTORY | HWMON_C_POWER_RESET_HISTORY | \
+		HWMON_C_REGISTER_TZ | HWMON_C_UPDATE_INTERVAL | HWMON_C_ALARMS,
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY,
+		HWMON_C_IN_RESET_HISTORY | HWMON_C_CURR_RESET_HISTORY),
 	HWMON_CHANNEL_INFO(in,
-			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN | 
-			   HWMON_I_HIGHEST | HWMON_I_MAX,
-			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN | 
-			   &HWMON_I_HIGHEST | HWMON_I_MAX,
-			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
-			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
-			   HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
-			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
-			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
-			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
-			   HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL),
+		HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN | \
+		HWMON_I_HIGHEST | HWMON_I_MAX,
+		HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN | \
+		HWMON_I_HIGHEST | HWMON_I_MAX,
+		HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
+		HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
+		HWMON_I_LABEL | HWMON_I_INPUT | HWMON_I_LOWEST | HWMON_I_MIN,
+		HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
+		HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
+		HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL,
+		HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL, HWMON_I_LABEL),
 	NULL
 };
 
 static const struct hwmon_chip_info max42500_chip_info = {
 	.ops = &max42500_hwmon_ops,
-	.info = max42500_info,
+	.info = max42500_info
 };
 
 static const struct regmap_config max42500_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = 0x2D
-	
 };
 
 static int max42500_probe(struct i2c_client *client, const struct i2c_device_id *id)
