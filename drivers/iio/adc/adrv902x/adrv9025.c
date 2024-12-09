@@ -980,7 +980,7 @@ static const struct iio_chan_spec_ext_info adrv9025_phy_rx_ext_info[] = {
 	 */
 	IIO_ENUM_AVAILABLE("gain_control_mode", IIO_SEPARATE,
 				  &adrv9025_agc_modes_available),
-	IIO_ENUM("gain_control_mode", false, &adrv9025_agc_modes_available),
+	IIO_ENUM("gain_control_mode", IIO_SEPARATE, &adrv9025_agc_modes_available),
 	_ADRV9025_EXT_RX_INFO("rssi", RSSI),
 	_ADRV9025_EXT_RX_INFO("quadrature_tracking_en", RX_QEC),
 	_ADRV9025_EXT_RX_INFO("hd2_tracking_en",
@@ -2750,7 +2750,7 @@ static int adrv9025_probe(struct spi_device *spi)
 		 apiVersion.majorVer, apiVersion.minorVer,
 		 apiVersion.maintenanceVer, apiVersion.buildVer);
 
-	ret = jesd204_fsm_start(phy->jdev, JESD204_LINKS_ALL);
+	ret = devm_jesd204_fsm_start(&spi->dev, phy->jdev, JESD204_LINKS_ALL);
 	if (ret)
 		goto out_iio_device_unregister;
 

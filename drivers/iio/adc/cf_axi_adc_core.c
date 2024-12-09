@@ -106,44 +106,6 @@ void axiadc_idelay_set(struct axiadc_state *st, unsigned lane, unsigned val)
 }
 EXPORT_SYMBOL_GPL(axiadc_idelay_set);
 
-static int axiadc_hw_submit_block(struct iio_dma_buffer_queue *queue,
-	struct iio_dma_buffer_block *block)
-{
-	struct iio_dev *indio_dev = queue->driver_data;
-	struct axiadc_state *st = iio_priv(indio_dev);
-
-	iio_dmaengine_buffer_submit_block(queue, block);
-
-	axiadc_write(st, ADI_REG_STATUS, ~0);
-	axiadc_write(st, ADI_REG_DMA_STATUS, ~0);
-
-	return 0;
-}
-
-static const struct iio_dma_buffer_ops axiadc_dma_buffer_ops = {
-	.submit = axiadc_hw_submit_block,
-	.abort = iio_dmaengine_buffer_abort,
-};
-
-static int axiadc_configure_ring_stream(struct iio_dev *indio_dev,
-	const char *dma_name)
-{
-	struct iio_buffer *buffer;
-
-	if (dma_name == NULL)
-		dma_name = "rx";
-
-	buffer = devm_iio_dmaengine_buffer_alloc(indio_dev->dev.parent, dma_name,
-						 &axiadc_dma_buffer_ops, indio_dev);
-	if (IS_ERR(buffer))
-		return PTR_ERR(buffer);
-
-	indio_dev->modes |= INDIO_BUFFER_HARDWARE;
-	iio_device_attach_buffer(indio_dev, buffer);
-
-	return 0;
-}
-
 static int axiadc_chan_to_regoffset(struct iio_chan_spec const *chan)
 {
 	if (chan->modified)
@@ -1064,7 +1026,6 @@ static int axiadc_probe(struct platform_device *pdev)
 	const struct of_device_id *id;
 	struct iio_dev *indio_dev;
 	struct axiadc_state *st;
-	struct resource *mem;
 	struct axiadc_spidev *axiadc_spidev;
 	struct axiadc_converter *conv;
 	struct device_link *link;
@@ -1125,9 +1086,7 @@ static int axiadc_probe(struct platform_device *pdev)
 	if (IS_ERR(st->jdev))
 		return PTR_ERR(st->jdev);
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	st->regs_size = resource_size(mem);
-	st->regs = devm_ioremap_resource(&pdev->dev, mem);
+	st->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(st->regs))
 		return PTR_ERR(st->regs);
 
@@ -1209,7 +1168,7 @@ static int axiadc_probe(struct platform_device *pdev)
 
 	if (!st->dp_disable && !axiadc_read(st, ADI_AXI_REG_ID) &&
 		of_find_property(pdev->dev.of_node, "dmas", NULL)) {
-		ret = axiadc_configure_ring_stream(indio_dev, NULL);
+		ret = devm_iio_dmaengine_buffer_setup(&pdev->dev, indio_dev, "rx");
 		if (ret < 0)
 			return ret;
 	}
@@ -1249,18 +1208,18 @@ static int axiadc_probe(struct platform_device *pdev)
 				"post_iio_register callback failed (%d)", ret);
 	}
 
-	ret = jesd204_fsm_start(st->jdev, JESD204_LINKS_ALL);
-	if (ret)
-		return ret;
+	if (st->jdev) {
+		ret = devm_jesd204_fsm_start(&pdev->dev, st->jdev, JESD204_LINKS_ALL);
+		if (ret)
+			return ret;
+	}
 
 	dev_info(&pdev->dev,
-		 "ADI AIM (%d.%.2d.%c) at 0x%08llX mapped to 0x%p probed ADC %s as %s\n",
+		 "ADI AIM (%d.%.2d.%c) probed ADC %s as %s\n",
 		 ADI_AXI_PCORE_VER_MAJOR(st->pcore_version),
 		 ADI_AXI_PCORE_VER_MINOR(st->pcore_version),
 		 ADI_AXI_PCORE_VER_PATCH(st->pcore_version),
-		 (unsigned long long)mem->start, st->regs,
-		 conv->chip_info->name,
-		 axiadc_read(st, ADI_AXI_REG_ID) ? "SLAVE" : "MASTER");
+		 conv->chip_info->name, axiadc_read(st, ADI_AXI_REG_ID) ? "SLAVE" : "MASTER");
 
 	return 0;
 }
